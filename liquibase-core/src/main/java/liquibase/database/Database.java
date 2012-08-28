@@ -5,6 +5,7 @@ import liquibase.changelog.ChangeSet;
 import liquibase.changelog.DatabaseChangeLog;
 import liquibase.changelog.RanChangeSet;
 import liquibase.database.structure.DatabaseObject;
+import liquibase.database.structure.Schema;
 import liquibase.exception.*;
 import liquibase.servicelocator.PrioritizedService;
 import liquibase.sql.visitor.SqlVisitor;
@@ -14,6 +15,7 @@ import liquibase.statement.DatabaseFunction;
 import java.io.IOException;
 import java.io.Writer;
 import java.math.BigInteger;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.List;
 
@@ -66,10 +68,14 @@ public interface Database extends DatabaseObject, PrioritizedService {
      */
     String getTypeName();
 
-    String getDefaultCatalogName() throws DatabaseException;
+    String getDefaultCatalogName();
 
     String getDefaultSchemaName();
 
+    Integer getDefaultPort();
+
+    String getLiquibaseCatalogName();
+    
     String getLiquibaseSchemaName();
     
     void setDefaultSchemaName(String schemaName) throws DatabaseException;
@@ -132,23 +138,23 @@ public interface Database extends DatabaseObject, PrioritizedService {
 
     void checkDatabaseChangeLogLockTable() throws DatabaseException;
 
-    void dropDatabaseObjects(String schema) throws DatabaseException;
+    void dropDatabaseObjects(Schema schema) throws DatabaseException;
 
     void tag(String tagString) throws DatabaseException;
 
     boolean doesTagExist(String tag) throws DatabaseException;
 
-    boolean isSystemTable(String catalogName, String schemaName, String tableName);
+    boolean isSystemTable(Schema schema, String tableName);
 
-    boolean isLiquibaseTable(String tableName);
+    boolean isLiquibaseTable(Schema schema, String tableName);
 
     boolean shouldQuoteValue(String value);
 
     boolean supportsTablespaces();
 
-    String getViewDefinition(String schemaName, String name) throws DatabaseException;
+    String getViewDefinition(Schema schema, String name) throws DatabaseException;
 
-    boolean isSystemView(String catalogName, String schemaName, String name);
+    boolean isSystemView(Schema schema, String name);
 
     String getDateLiteral(java.sql.Date date);
 
@@ -163,11 +169,15 @@ public interface Database extends DatabaseObject, PrioritizedService {
      * Currently only escapes MS-SQL because other DBMSs store table names case-sensitively when escaping is used which
      * could confuse end-users.  Pass null to schemaName to use the default schema
      */
-    String escapeTableName(String schemaName, String tableName);
+    String escapeTableName(String catalogName, String schemaName, String tableName);
 
-    String escapeIndexName(String schemaName, String indexName);
+    String escapeIndexName(String catalogName, String schemaName, String indexName);
 
     String escapeDatabaseObject(String objectName);
+
+    String escapeSchemaName(String schemaName);
+
+    String escapeCatalogName(String name);
 
     /**
      * Escapes a single column name in a database-dependent manner so reserved words can be used as a column
@@ -178,7 +188,7 @@ public interface Database extends DatabaseObject, PrioritizedService {
      *
      * @return escaped column name
      */
-    String escapeColumnName(String schemaName, String tableName, String columnName);
+    String escapeColumnName(String catalogName, String schemaName, String tableName, String columnName);
 
     /**
      * Escapes a list of column names in a database-dependent manner so reserved words can be used as a column
@@ -191,17 +201,15 @@ public interface Database extends DatabaseObject, PrioritizedService {
 
 //    Set<UniqueConstraint> findUniqueConstraints(String schema) throws DatabaseException;
 
-    String convertRequestedSchemaToSchema(String requestedSchema) throws DatabaseException;
-
-    String convertRequestedSchemaToCatalog(String requestedSchema) throws DatabaseException;
-
     boolean supportsSchemas();
+
+    boolean supportsCatalogs();
 
     String generatePrimaryKeyName(String tableName);
 
-    String escapeSequenceName(String schemaName, String sequenceName);
+    String escapeSequenceName(String catalogName, String schemaName, String sequenceName);
 
-    String escapeViewName(String schemaName, String viewName);
+    String escapeViewName(String catalogName, String schemaName, String viewName);
 
     ChangeSet.RunStatus getRunStatus(ChangeSet changeSet) throws DatabaseException, DatabaseHistoryException;
 
@@ -266,5 +274,26 @@ public interface Database extends DatabaseObject, PrioritizedService {
 
     void enableForeignKeyChecks() throws DatabaseException;
 
+    public boolean isCaseSensitive();
+
     public boolean isReservedWord(String string);
+
+    Schema correctSchema(Schema schema);
+    
+    String correctTableName(String tableName);
+
+    String correctConstraintName(String constraintName);
+
+    String correctColumnName(String columnName);
+
+    String correctPrimaryKeyName(String pkName);
+
+    String correctForeignKeyName(String fkName);
+    
+    String correctIndexName(String indexName);
+
+    String getAssumedSchemaName(String catalogName, String schemaName);
+
+    String getAssumedCatalogName(String catalogName, String schemaName);
+
 }

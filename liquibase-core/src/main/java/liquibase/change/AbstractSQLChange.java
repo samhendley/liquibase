@@ -24,8 +24,7 @@ public abstract class AbstractSQLChange extends AbstractChange {
     private String endDelimiter;
     private String sql;
 
-    protected AbstractSQLChange(String tagName, String changeName, int priority) {
-        super(tagName, changeName, priority);
+    protected AbstractSQLChange() {
         stripComments= false;
         splitStatements =true;
     }
@@ -86,6 +85,24 @@ public abstract class AbstractSQLChange extends AbstractChange {
     public void setEndDelimiter(String endDelimiter) {
         this.endDelimiter = endDelimiter;
     }
+
+    /**
+     * Calculates an MD5 from the contents of the file.
+     *
+     * @see liquibase.change.AbstractChange#generateCheckSum()
+     */
+    @Override
+    public CheckSum generateCheckSum() {
+        String sql = getSql();
+        if (sql == null) {
+            sql = "";
+        }
+        return CheckSum.compute(this.endDelimiter+":"+
+                this.isSplittingStatements()+":"+
+                this.isStrippingComments()+":"+
+                sql.replaceAll("\r\n", "\n").replaceAll("\r", "\n")); //normalize line endings
+    }
+
 
     /**
      * Generates one or more statements depending on how the SQL should be parsed.

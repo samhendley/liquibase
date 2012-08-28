@@ -2,11 +2,12 @@ package liquibase.database.core;
 
 import liquibase.database.AbstractDatabase;
 import liquibase.database.DatabaseConnection;
+import liquibase.database.jvm.JdbcConnection;
+import liquibase.database.structure.Schema;
 import liquibase.exception.DatabaseException;
 import liquibase.executor.ExecutorService;
 import liquibase.logging.LogFactory;
 import liquibase.statement.core.RawSqlStatement;
-import liquibase.util.StringUtils;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -20,6 +21,8 @@ public class PostgresDatabase extends AbstractDatabase {
     private Set<String> systemTablesAndViews = new HashSet<String>();
 
     private String defaultDatabaseSchemaName;
+
+    private Set<String> reservedWords = new HashSet<String>();
 
     public PostgresDatabase() {
 //        systemTablesAndViews.add("pg_logdir_ls");
@@ -72,12 +75,33 @@ public class PostgresDatabase extends AbstractDatabase {
 //        systemTablesAndViews.add("book_pkey");
     }
 
+    @Override
+    public void setConnection(DatabaseConnection conn) {
+        try {
+            reservedWords.addAll(Arrays.asList(((JdbcConnection) conn).getMetaData().getSQLKeywords().toUpperCase().split(",\\s*")));
+            reservedWords.addAll(Arrays.asList("USER", "LIKE", "GROUP", "DATE", "ALL"));
+        } catch (Exception e) {
+            LogFactory.getLogger().warning("Cannot retrieve reserved words", e);
+        }
+
+        super.setConnection(conn);
+    }
+
     public String getTypeName() {
         return "postgresql";
     }
 
     @Override
-    public Set<String> getSystemTablesAndViews() {
+    protected String getDefaultDatabaseProductName() {
+        return "PostgreSQL";
+    }
+
+    public Integer getDefaultPort() {
+        return 5432;
+    }
+
+    @Override
+    public Set<String> getSystemViews() {
         return systemTablesAndViews;
     }
 
@@ -87,6 +111,11 @@ public class PostgresDatabase extends AbstractDatabase {
 
     public boolean supportsInitiallyDeferrableColumns() {
         return true;
+    }
+
+    @Override
+    protected String correctObjectName(String objectName) {
+        return objectName.toLowerCase();
     }
 
     public boolean isCorrectDatabaseImplementation(DatabaseConnection conn) throws DatabaseException {
@@ -111,45 +140,6 @@ public class PostgresDatabase extends AbstractDatabase {
         }
         
         return "NOW()";
-    }
-
-    @Override
-    protected String getDefaultDatabaseSchemaName() throws DatabaseException {
-
-        if (defaultDatabaseSchemaName == null) {
-            try {
-                List<String> searchPaths = getSearchPaths();
-                if (searchPaths != null && searchPaths.size() > 0) {
-                    for (String searchPath : searchPaths) {
-                        if (searchPath != null && searchPath.length() > 0) {
-                            defaultDatabaseSchemaName = searchPath;
-
-                            if (defaultDatabaseSchemaName.equals("$user") && getConnection().getConnectionUserName() != null) {
-                                if (!schemaExists(getConnection().getConnectionUserName())) {
-                                    defaultDatabaseSchemaName = null;
-                                } else {
-                                    defaultDatabaseSchemaName = getConnection().getConnectionUserName();
-                                }
-                            }
-
-                            if (defaultDatabaseSchemaName != null)
-                                break;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                // TODO: throw?
-                e.printStackTrace();
-                LogFactory.getLogger().severe("Failed to get default catalog name from postgres", e);
-            }
-        }
-
-        return defaultDatabaseSchemaName;
-    }
-
-    @Override
-    public String getDefaultCatalogName() throws DatabaseException {
-        return "public";
     }
 
     @Override
@@ -185,10 +175,11 @@ public class PostgresDatabase extends AbstractDatabase {
 
 
     @Override
-    public boolean isSystemTable(String catalogName, String schemaName, String tableName) {
-        return super.isSystemTable(catalogName, schemaName, tableName)
-                || "pg_catalog".equals(schemaName)
-                || "pg_toast".equals(schemaName)
+    public boolean isSystemTable(Schema schema, String tableName) {
+        schema = correctSchema(schema);
+        return super.isSystemTable(schema, tableName)
+                || "pg_catalog".equals(schema.getName())
+                || "pg_toast".equals(schema.getName())
                 || tableName.endsWith("_seq")
                 || tableName.endsWith("_key")
                 || tableName.endsWith("_pkey")
@@ -215,26 +206,6 @@ public class PostgresDatabase extends AbstractDatabase {
     	return false;
     }
     
-    @Override
-    public String convertRequestedSchemaToSchema(String requestedSchema) throws DatabaseException {
-        if (requestedSchema == null)
-            requestedSchema = getDefaultSchemaName();
-
-        if (requestedSchema == null) {
-            // Return the catalog name instead..
-            return getDefaultCatalogName();
-        } else {
-            String schema = StringUtils.trimToNull(requestedSchema);
-            return (schema != null) ? schema.toLowerCase() : schema;
-        }
-    }
-
-    @Override
-    public String convertRequestedSchemaToCatalog(String requestedSchema) throws DatabaseException {
-        return super.convertRequestedSchemaToCatalog(requestedSchema);
-    }
-
-
     @Override
     public String escapeDatabaseObject(String objectName) {
         if (objectName == null) {
@@ -272,15 +243,6 @@ public class PostgresDatabase extends AbstractDatabase {
     public boolean isReservedWord(String tableName) {
         return reservedWords.contains(tableName.toUpperCase());
     }
-
-    /*
-    * Reserved words from postgresql documentation
-    */
-    private Set<String> reservedWords = new HashSet<String>(Arrays.asList(
-            "USER", "LIKE", "GROUP", "DATE", "ALL"
-//            "ALL", "ANALYSE", "ANALYZE", "AND", "ANY", "ARRAY", "AS", "ASC", "ASYMMETRIC", "AUTHORIZATION", "BETWEEN", "BINARY", "BOTH", "CASE", "CAST", "CHECK", "COLLATE", "COLUMN", "CONSTRAINT", "CORRESPONDING", "CREATE", "CROSS", "CURRENT_DATE", "CURRENT_ROLE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_USER", "DEFAULT", "DEFERRABLE", "DESC", "DISTINCT", "DO", "ELSE", "END", "EXCEPT", "FALSE", "FOR", "FOREIGN", "FREEZE", "FROM", "FULL", "GRANT", "GROUP", "HAVING",
-//            "ILIKE", "IN", "INITIALLY", "INNER", "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "LEADING", "LEFT", "LIKE", "LIMIT", "LOCALTIME", "LOCALTIMESTAMP", "NATURAL", "NEW", "NOT", "NOTNULL", "NULL", "OFF", "OFFSET", "OLD", "ON", "ONLY", "OPEN", "OR", "ORDER", "OUTER", "OVERLAPS", "PLACING", "PRIMARY", "REFERENCES", "RETURNING", "RIGHT", "SELECT", "SESSION_USER", "SIMILAR", "SOME", "SYMMETRIC", "TABLE", "THEN", "TO", "TRAILING", "TRUE", "UNION", "UNIQUE", "USER", "USING", "VERBOSE", "WHEN", "WHERE"
-    ));
 
     /*
      * Get the current search paths
@@ -336,5 +298,10 @@ public class PostgresDatabase extends AbstractDatabase {
         Long count = ExecutorService.getInstance().getExecutor(this).queryForLong(new RawSqlStatement(query));
 
         return count != null && count > 0;
+    }
+
+    @Override
+    public String escapeIndexName(String catalogName,String schemaName, String indexName) {
+        return escapeDatabaseObject(indexName);
     }
 }

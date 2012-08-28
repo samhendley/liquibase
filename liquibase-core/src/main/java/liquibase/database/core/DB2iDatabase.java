@@ -1,10 +1,6 @@
 package liquibase.database.core;
 
-import java.sql.Connection;
-
 import liquibase.database.DatabaseConnection;
-import liquibase.database.structure.type.DataType;
-import liquibase.database.structure.type.FloatType;
 import liquibase.exception.DatabaseException;
 
 public class DB2iDatabase extends DB2Database {
@@ -25,6 +21,11 @@ public class DB2iDatabase extends DB2Database {
             return "com.ibm.as400.access.AS400JDBCDriver";
         }
         return null;
+    }
+
+    @Override
+    protected String getDefaultDatabaseProductName() {
+        return "DB2i";
     }
 
     @Override
